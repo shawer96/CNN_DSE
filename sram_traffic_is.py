@@ -325,7 +325,7 @@ def gen_trace_filter_partial(
         #        else:
         #            entry += ", "
 
-          += 1
+        local_cycles  += 1
         entry += postfix + "\n"
         outfile.write(entry)
 
