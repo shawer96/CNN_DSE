@@ -1,5 +1,6 @@
 *.log
 original_repo
+./.vscode
 
 
 __pycache__

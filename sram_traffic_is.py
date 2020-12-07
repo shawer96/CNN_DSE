@@ -30,19 +30,28 @@ def sram_traffic(
     e2m = num_ofmap_px
     
     # Variables to calculate folds in runtime
-    num_h_fold = 1
-    num_v_fold = 1
+    num_h_fold = 1  #初始化垂直方向折叠（分块）次数（循环多少次）
+    num_v_fold = 1  #初始化水平方向折叠（分块）次数（循环多少次）
     max_parallel_window = 1
 
     # Variables for utilization calculation
     util = 0
     compute_cycles = 0
 
+    '''
+    这部分和weight stationary如出一辙, 都是以权重的大小来决定分块的大小
+    所以要比较单个卷积核和col的大小
+    if col上的计算单元数量比单个卷积核的像素少：那么要折叠单个卷积核
+    else col上的计算单元数量比单个卷积核的像素多：那么要展开多个卷积核max_parallel_window次
+    '''
     if dimension_rows < px_per_conv_window:
         num_h_fold = math.ceil(px_per_conv_window/dimension_rows)
     else:
         max_parallel_window = math.floor(dimension_rows/ px_per_conv_window)
 
+    '''
+    沿着水平方向展开的是Nox*Noy
+    '''
     reqd_cols = e2          # Total number of cols need to be mapped
     max_cols_per_v_fold = max_parallel_window * dimension_cols
     num_v_fold = math.ceil(reqd_cols / max_cols_per_v_fold)
@@ -52,18 +61,19 @@ def sram_traffic(
     prev_cycl = 0
     
     # These are the starting addresses of ifmap windows in the memory 
-    all_ifmap_base_addr_list = []
+    all_ifmap_base_addr_list = []   #这里存储的是每个output pixel的地址
     for px in range(int(e2)):
         addr = int(px / E_w) * strides * hc + (px%E_w) * strides * num_channels
         all_ifmap_base_addr_list.append(addr)
 
     # These are the starting addresses of filter windows in the memory
-    hc = ifmap_w * num_channels
+    hc = ifmap_w * num_channels 
     all_filt_addr_list = []
     for c in range(num_filt):         #number of ofmap px in a ofmap channel
         addr = (c) * r2c + filt_base 
         all_filt_addr_list.append(addr)
 
+    #沿着oc方向遍历每个Toc, 这里的v相当于是块的标号, 这里是先沿着水平方向遍历再沿着垂直方向, 相当于是优先输出的
     for v in tqdm(range(int(num_v_fold))):
 
         # Take a slice of the starting addresses that are relevant for this v_fold
@@ -73,10 +83,12 @@ def sram_traffic(
         idx_end = idx_start + cols_this_fold
         col_base_addr_list = all_ifmap_base_addr_list[idx_start:idx_end]
 
+        # 算力小于单个卷积核尺寸
         if num_h_fold > 1:
 
             rem_h = r2c
 
+            # 这里相当于是在遍历整个每个列
             for h in range(num_h_fold):
                 rows_this_fold = min(rem_h, dimension_rows)
 
@@ -123,7 +135,7 @@ def sram_traffic(
 
                 rem_h -= rows_this_fold
                 cycles = max(cycles_f, cycles_o)
-
+                # 本次的执行时间
                 del_cycl = cycles - prev_cycl
                 util += util_this_fold * del_cycl
                 compute_cycles += del_cycl
@@ -167,7 +179,7 @@ def sram_traffic(
                         sram_write_trace_file= sram_write_trace_file
                     )
 
-
+            # 这两部分的延时其实可以相互掩盖, 这部分其实只有output的时间
             cycles = max(cycles_f, cycles_o)
             #rows_this_fold = parallel_window * r2c
 
@@ -313,7 +325,7 @@ def gen_trace_filter_partial(
         #        else:
         #            entry += ", "
 
-        local_cycles += 1
+          += 1
         entry += postfix + "\n"
         outfile.write(entry)
 
@@ -348,10 +360,12 @@ def gen_trace_ofmap(
         ofmap_px_index_list.append(add)
 
     # This offset indicates the cycle in which the data from the first col is ready
+    # 这一部分是计算延时, 每个output需要Nic*Nkx*Nky个cycle才能计算出来
     local_cycle = cycle + window_size
 
     outfile = open(sram_write_trace_file, 'a')
 
+    # 这一部分是将ofmap从PE阵列load出去的时间, 就是oc+阵列宽度
     total_ofmap_cycles = num_filters + max(active_cols_list)
     for f in range(total_ofmap_cycles):
         entry = str(local_cycle) + ", "
@@ -377,6 +391,7 @@ def gen_trace_ofmap(
 
     outfile.close()
 
+    # 因为最后一次其实多加了1, 这里要减去1
     return (local_cycle - 1)
 
 

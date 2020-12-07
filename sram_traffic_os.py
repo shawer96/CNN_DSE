@@ -30,7 +30,9 @@ def sram_traffic(
     e2m = num_ofmap_px
     
     # Variables to calculate folds in runtime
-    num_h_fold = math.ceil(e2/dimension_rows)
+    # 单个output channel在一列上展开, 最理想情况是d-rows = e2, 也就是每个pixels都有一个计算单元, 但实际上不可能
+    num_h_fold = math.ceil(e2 / dimension_rows)
+    # 沿着水平方向展开的还是oc
     num_v_fold = math.ceil(num_filt/dimension_cols)
 
     cycles = 0
@@ -115,22 +117,28 @@ def gen_read_trace(
     # This initialization assumes num_rows << num_ofmap_px
     # The assignment logic needs to be modified if that is not the case
     for r in range(dim_rows):
+        # 沿着列输入的是ifmap, 如果r > ofmap_w, 意味着卷积向下滑动了stride
         base_row_id = math.floor(r / ofmap_w) * stride
+        # 进入阵列每行第一个数的地址,沿着行输入的是ifmap, 假设r<ofmap_w, 那么就相当于第一行1, 第二行1+stride...
         base_col_id = r % ofmap_w * stride
-        base_addr  = base_row_id * hc + base_col_id * num_channels 
+        # 每一行
+        base_addr = base_row_id * hc + base_col_id * num_channels
+        print((base_row_id, base_col_id, base_addr)) 
 
         if r < e2:
             clk_offset = r * -1             # Clock offset takes care of the skew due to store and forward
         else:
-            clk_offset = neg_inf            # In case num_ofamp_px < dim_rows
+            clk_offset = neg_inf            # In case num_ofamp_px < dim_rows, 初始化为负无穷
 
-        row_base_addr.append(base_addr)
-        row_clk_offset.append(clk_offset)
-        row_ofmap_idx.append(r)
-        v_fold_row.append(0)
-        v_fold_barrier.append(False)
+        
+        row_base_addr.append(base_addr)     # 每行的ifmap第一个元素的地址
+        row_clk_offset.append(clk_offset)   # 每行的skew导致的延时
+        row_ofmap_idx.append(r)             # 每行计算的ofmap index标号
+        v_fold_row.append(0)                #
+        v_fold_barrier.append(False)        #
 
     for c in range(dim_cols):
+        # 这里的是每一列filter的基地址, 因为沿着col展开的是各个卷积核
         base_addr = c * r2c
 
         # Anand: TODO
@@ -139,10 +147,10 @@ def gen_read_trace(
             lane_done.append(False)
         else:
             clk_offset = neg_inf
-            lane_done.append(True)
+            lane_done.append(True)          #lane done是指是否所有filter被加载完
 
         col_base_addr.append(base_addr)
-        col_clk_offset.append(clk_offset)
+        col_clk_offset.append(clk_offset)   #每一列都延后一拍
         v_fold_col.append(0)
         h_fold_col.append(0)
 
@@ -174,6 +182,7 @@ def gen_read_trace(
 
                 inc = row_clk_offset[r]
 
+                # 这个地址理解的不是很好, 先放着, 但是可以肯定的是ifmap的
                 addr_row_offset = math.floor(inc / rc) * ifmap_w * num_channels
                 addr_col_offset = inc % rc
                 ifmap_addr = row_base_addr[r] + addr_row_offset + addr_col_offset 
@@ -182,16 +191,23 @@ def gen_read_trace(
             else:
                 ifmap_read += ", "
 
+            # 消耗前面的空拍
             row_clk_offset[r] += 1
 
             if (row_clk_offset[r] > 0) and (row_clk_offset[r] % r2c == 0):   #Completed MAC for one OFMAP px
                 
-                row_ofmap_idx[r] += dim_rows
+                # 表示已经计算完一圈了, 所以每行计算的标号要增加dim_rows
+                #row    index
+                #0      0       3   (r2c个cycle计算完), idx更新为0+3
+                #1      1       4   (r2c个cycle计算完), idx更新为1+3, 注意这一行慢一拍
+                #2      2       5   ....
+                row_ofmap_idx[r] += dim_rows  
                 ofmap_idx = row_ofmap_idx[r]
 
                 # Update progress bar
-                pbar.update(1)
+                pbar.update(1) 
 
+                # 判断是否已经计算完了一个ofmap channel
                 if ofmap_idx < e2:
                     row_clk_offset[r] = 0
 
@@ -204,7 +220,8 @@ def gen_read_trace(
                     v_fold_row[r] += 1
                     #pbar.update(e2)
 
-                    if(v_fold_row[r] < num_v_fold):
+                    if (v_fold_row[r] < num_v_fold):
+                        # 计算完了一个ofmap channel, 所以ofmap idx要更新
                         row_ofmap_idx[r]  = r
 
                         base_row_id = math.floor(r / ofmap_w) * stride
@@ -221,6 +238,7 @@ def gen_read_trace(
 
                     else:
                         row_clk_offset[r] = neg_inf
+            print((r, row_ofmap_idx[r]))
 
         # Get out of the barrier one by one
         # IMPORTANT: The barrier insertion and recovery is in separate loops to ensure that

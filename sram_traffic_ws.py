@@ -40,8 +40,8 @@ def sram_traffic(
     '''
     '''
     # Variables to calculate folds in runtime
-    num_h_fold = 1  #初始化列折叠（分块）次数（循环多少次）
-    num_v_fold = 1  #初始化行折叠（分块）次数（循环多少次）
+    num_h_fold = 1  #初始化垂直方向折叠（分块）次数（循环多少次）
+    num_v_fold = 1  #初始化水平方向折叠（分块）次数（循环多少次）
     max_parallel_window = 1 #初始化每个pe col并行的卷积窗数量
 
     # Variables for utilization calculation
@@ -96,24 +96,25 @@ def sram_traffic(
         cols_this_fold = min(remaining_cols, max_parallel_window * dimension_cols)
         idx_start = v * dimension_cols          #每一块的起始地址
         idx_end = idx_start + cols_this_fold    #每一块的结束地址
-        col_addr_list = all_col_addr_list[idx_start:idx_end]    #块地址的排布
+        col_addr_list = all_col_addr_list[idx_start:idx_end]    #weight块地址的排布
 
-        # 这里开始遍历每个循环, 如果不是最后一次分块, 意味着还存在着
+        # 这里开始遍历每个循环, 这里的if对应的是算力小于单个卷积核尺寸的情况
         if num_h_fold > 1 :
            
-            #    单个卷积核的像素数量
+            # 单个卷积核的像素数量
             rem_h = r2c                     # Tracks the elements processed within a conv filter 
             next_ifmap_addr = ifmap_base    # Starts from the top left corner of the IFMAP matrix
 
             #这里相当于是在遍历整个每个列
             for h in range(num_h_fold):
-                # 遍历一列的元素
+                # 遍历一列的元素, 是剩余元素和阵列高度中较小的一个
                 rows_this_fold = min(rem_h, dimension_rows) 
                 #print("h fold id: " + str(h))
 
                 # Values returned
                 # cycles        -> Cycle count for the next operation ie. cycles elapsed + 1
                 # col_addr_list -> The starting filter address for the next iteration
+                # 计算预载weight的时间
                 cycles, col_addr_list   = gen_trace_filter_partial(
                                             col_addrs   = col_addr_list,
                                             cycle       = cycles,
@@ -121,7 +122,8 @@ def sram_traffic(
                                             remaining   = rows_this_fold,
                                             sram_read_trace_file = sram_read_trace_file
                                             )
-                #print("Weights loaded by " + str(cycles) + " cycles")
+                # print("Weights loaded by " + str(cycles) + " cycles")
+                # ifmap和ofmap的cycle都是从weight load结束之后才开始计算
                 data_out_cycles     = cycles    #Store this cycle for parallel readout
                 cycles_ifmap            = gen_trace_ifmap_partial(
                                             cycle = cycles,
@@ -152,14 +154,17 @@ def sram_traffic(
                 # 参与计算的PE数量占总计算资源的比例, 这里是每个cols_this_fold的计算量
                 util_this_fold = (rows_this_fold * cols_this_fold) /(dimension_rows * dimension_cols)
 
-                rem_h -= rows_this_fold # 一个卷积核剩余的元素数量
+                rem_h -= rows_this_fold  # 一个卷积核剩余的元素数量
+                # ifmap的load和ofmap的store同时发生, 是相互隐藏的
                 cycles = max(cycles_ifmap, cycles_ofmap)
 
+                # 执行this_fold所花费的时间
                 del_cycl = cycles - prev_cycl
                 util += util_this_fold *  del_cycl
                 compute_cycles += del_cycl
                 prev_cycl = cycles
 
+        # 下面是计算阵列的大小大于卷积窗时的函数
         else:
             #filters_this_fold = min(remaining_cols, max_cols_per_v_fold)
             filt_done = v * max_parallel_window * dimension_cols
@@ -168,6 +173,7 @@ def sram_traffic(
             parallel_window = math.ceil(rem / dimension_cols)
             parallel_window = int(min(max_parallel_window, parallel_window))
         
+            # 这个函数主要是在计算读取权重的cycle数
             cycles_filter = gen_filter_trace(
                                 cycle = cycles,
                                 num_rows = dimension_rows, num_cols = dimension_cols,
@@ -177,7 +183,7 @@ def sram_traffic(
                                 filters_this_fold=cols_this_fold,
                                 sram_read_trace_file=sram_read_trace_file
                                 )
-
+            # 这一部分是load ifmap的时间
             cycles_ifmap, rows_this_fold\
                             = gen_ifmap_trace(
                             cycle = cycles_filter,
@@ -189,7 +195,7 @@ def sram_traffic(
                             sram_read_trace_file = sram_read_trace_file
                             )
 
-            
+            # 这一部分是load
             cycles_ofmap = gen_trace_ofmap(
                             cycle = cycles_filter,
                             num_rows = dimension_rows, num_cols = dimension_cols,
@@ -364,6 +370,7 @@ def gen_trace_filter_partial(
                     remaining=4,
                     sram_read_trace_file="sram_read.csv"
 ):
+        # 记录从sram读取weight到PEA的过程
         outfile = open(sram_read_trace_file, 'a')
         num_cols = len(col_addrs)
 
@@ -373,6 +380,8 @@ def gen_trace_filter_partial(
             prefix += ", "
 
         # Entries per cycle 
+        # 预载weight, 时间与此次预载每一列中的weight数量有关
+        # weight预载的时间就是remaining的数量
         for r in range(remaining):              # number of rows this cycle
             entry = str(cycle) + ", " + prefix
 
@@ -422,10 +431,12 @@ def gen_trace_ifmap_partial(
     #outfile.write(str(filter_done) + ", " + str(num_filters)+", "+str(remaining_filters)+", "+ "\n")
     #ofmap_offset = filter_done * num_ofmap_px
     ofmap_offset = filter_done
+    # 有效计算的cols数量
     effective_cols = min(remaining_filters, num_cols)
     tick = 0                                # Proxy for clock to track input skewing
 
     # Outerloop for all ofmap pixels in an ofmap channel
+    # 每一列计算output pixels的部分和, 对于每一个output pixels, 都需要一个cycle
     for e in range(int(num_ofmap_px)):
         entry = str(cycle) + ", "
         cycle += 1    
@@ -513,6 +524,7 @@ def gen_trace_ofmap(
     effective_cols    = num_cols * parallel_window
     effective_cols    = min(effective_cols, remaining_filters)
 
+    # 考虑单个oc, weight需要被复用Nox*Noy*Noc次才能计算出单个output pixels
     for e in range(int(num_ofmap_px)):
         entry = str(cycle) + ", "
         cycle += 1
@@ -555,6 +567,7 @@ def gen_trace_ofmap_partial_imm(
         a = (filters_done + col)
         col_addr.append(a)
     
+    #output cycles d 
     for tick in range(int(num_ofmap_px + num_cols)):
         cycle = start_cycle + tick
 
