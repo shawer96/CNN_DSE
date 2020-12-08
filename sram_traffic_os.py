@@ -33,7 +33,7 @@ def sram_traffic(
     # 单个output channel在一列上展开, 最理想情况是d-rows = e2, 也就是每个pixels都有一个计算单元, 但实际上不可能
     num_h_fold = math.ceil(e2 / dimension_rows)
     # 沿着水平方向展开的还是oc
-    num_v_fold = math.ceil(num_filt/dimension_cols)
+    num_v_fold = math.ceil(num_filt/dimension_cols)     #每一列需要计算几个oc
 
     cycles = 0
 
@@ -98,21 +98,22 @@ def gen_read_trace(
     remaining_filt  = num_filters
     ifmap_done      = False
     filt_done       = False
-    row_base_addr   = []
-    row_clk_offset  = []
-    row_ofmap_idx   = []
-    v_fold_row      = []
-    col_base_addr   = []
-    col_clk_offset  = []
-    v_fold_col      = []
+    row_base_addr   = []    # 第r行的ifmap第一个元素的地址
+    row_clk_offset  = []    # 第r行有效运行的时间, 如果前面是空拍则为负
+    row_ofmap_idx   = []    # 第r行计算的一个channel ofmap的px标号, 从0~e2-1
+    v_fold_row      = []    # 这一列已经计算了几个channel的output
+    col_base_addr   = []    # 每列的filter基地址
+    col_clk_offset  = []    
+    v_fold_col      = []    # 第r行处理到了第几个channel的ofmap, 从0~num_v_fold
     h_fold_col      = []
-    lane_done       = []
-    v_fold_barrier  = []
+    lane_done       = []    #
+    v_fold_barrier  = []    # 该行是否需要barrier直到这张图被计算完才开始下一次计算
 
     # Variables for utilization calculation
     rows_used = 0
     cols_used = 0
     util      = 0
+
 
     # This initialization assumes num_rows << num_ofmap_px
     # The assignment logic needs to be modified if that is not the case
@@ -123,7 +124,7 @@ def gen_read_trace(
         base_col_id = r % ofmap_w * stride
         # 每一行
         base_addr = base_row_id * hc + base_col_id * num_channels
-        print((base_row_id, base_col_id, base_addr)) 
+        # print((base_row_id, base_col_id, base_addr)) 
 
         if r < e2:
             clk_offset = r * -1             # Clock offset takes care of the skew due to store and forward
@@ -222,6 +223,7 @@ def gen_read_trace(
 
                     if (v_fold_row[r] < num_v_fold):
                         # 计算完了一个ofmap channel, 所以ofmap idx要更新
+                        # 这里的v_fold_row是oc/nums-cols, 也是每一列要计算的Toc数量
                         row_ofmap_idx[r]  = r
 
                         base_row_id = math.floor(r / ofmap_w) * stride
@@ -230,6 +232,21 @@ def gen_read_trace(
                         row_base_addr[r]  = base_addr
 
                         # Stall this col from proceeding until all the rows reach the v_fold boundary
+                        # 新的一行已经计算到了新的oc, 但是这一行上面的行还没有计算到, 需要设置一个barrier, 
+                        # barrier[r] == true的时候, 不能进行计算
+                        # 阵列形状对bubble的影响非常大, 当e2/col的余数越小时, 最终的bubble越小, 当其能完全整除时, 没有bubble
+                        # 这一点可以改变阵列的形状进来验证
+                        '''
+                        (row idx barrier) idx barrier ....
+                        (0	32	 False)	32	 False)	0	 False)	0	 False)	0	 False)	0	 False)	0	 False)	8	 False)	8
+                        (1	33	 False)	33	 False)	33	 False)	1	 False)	1	 False)	1	 False)	1	 False)	1	 False)	9
+                        (2	34	 False)	34	 False)	34	 False)	34	 False)	2	 False)	2	 False)	2	 False)	2	 False)	2
+                        (3	27	 False)	35	 False)	35	 False)	35	 False)	35	 False)	3	 False)	3	 False)	3	 False)	3
+                        (4	28	 False)	28	 False)	4	 True)	4	 True)	4	 True)	4	 True)	4	 True)	4	 False)	4
+                        (5	29	 False)	29	 False)	29	 False)	5	 True)	5	 True)	5	 True)	5	 True)	5	 True)	5
+                        (6	30	 False)	30	 False)	30	 False)	30	 False)	6	 True)	6	 True)	6	 True)	6	 True)	6
+                        (7	23	 False)	31	 False)	31	 False)	31	 False)	31	 False)	7	 True)	7	 True)	7	 True)	7
+                        '''
                         if (r != 0) and ((v_fold_row[r] > v_fold_row[r-1]) or (v_fold_barrier[r-1] == True)):
                             row_clk_offset[r] = neg_inf
                             v_fold_barrier[r] = True
@@ -238,7 +255,7 @@ def gen_read_trace(
 
                     else:
                         row_clk_offset[r] = neg_inf
-            print((r, row_ofmap_idx[r]))
+            print((r, row_ofmap_idx[r], v_fold_barrier[r], v_fold_row[r]))
 
         # Get out of the barrier one by one
         # IMPORTANT: The barrier insertion and recovery is in separate loops to ensure that
@@ -247,10 +264,12 @@ def gen_read_trace(
         # Since indx 0 never enters the barrier, this should work fine
         flag = False
         for r in range(dim_rows):
+            # 这一部分在release barrier
             if v_fold_barrier[r] and flag==False:
                 if (v_fold_row[r] == v_fold_row[r-1]) and (v_fold_barrier[r-1] == False):
                     v_fold_barrier[r] = False
                     flag = True
+                    # 因为之前stall住了, 要对clk进行修正
                     row_clk_offset[r] = row_clk_offset[r-1] -1
 
         # Check if all input traces are done
@@ -272,6 +291,7 @@ def gen_read_trace(
 
             col_clk_offset[c] += 1
 
+            # 列已经
             if(col_clk_offset[c] > 0) and (col_clk_offset[c] % r2c == 0):
 
                 # Get the v fold this col is working on and check the status of input trace generation
@@ -281,6 +301,7 @@ def gen_read_trace(
                 h_fold_col[c] += 1
 
                 # Anand: Check if all the input traces are generated for the given v fold
+                # 每一列执行到了第几个个Toc
                 if (h_fold_col[c] < num_h_fold):
                     col_clk_offset[c] = 0
                 else:
@@ -303,6 +324,7 @@ def gen_read_trace(
         # Check if all filter traces are generated
         filt_done = True
         for c in range(dim_cols):
+            # 单个车道是否计算完毕了, 这里的车道是指一列
             if lane_done[c] == False:
                 filt_done = False
 
@@ -317,7 +339,7 @@ def gen_read_trace(
 
         # Update tracking variables
         local_cycle += 1
-
+        print(local_cycle, filt_done, ifmap_done)
     pbar.close()
     outfile.close()
     #ofmap_out.close()
@@ -356,6 +378,7 @@ def gen_write_trace(
     local_cycle = 0
     sticky_flag = False     # This flag is in place to fix the OFMAP cycle shaving bug
 
+
     for r in range(active_row):
         id_row.append(r)
 
@@ -369,10 +392,12 @@ def gen_write_trace(
     outfile = open(sram_write_trace_file,"w")
 
     #This is the cycle when all the OFMAP elements in the first col become available
+    #第一个元素算完的时间为
     local_cycle = r2c + active_col - 1
 
     while (remaining_px > 0) or (remaining_filt > 0):
 
+        # 每行都是一个pixels
         active_row = min(dim_rows, remaining_px)
 
         for r in range(active_row):
