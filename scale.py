@@ -8,7 +8,7 @@ from absl import app
 FLAGS = flags.FLAGS
 #name of flag | default | explanation
 flags.DEFINE_string("arch_config","./configs/scale.cfg","file where we are getting our architechture from")
-flags.DEFINE_string("network","./topologies/conv_nets/alexnet.csv","topology that we are reading")
+flags.DEFINE_string("network","./topologies/conv_nets/mobilenet.csv","topology that we are reading")
 
 
 class scale:
@@ -104,7 +104,7 @@ class scale:
             df_string = "Input Stationary"
 
         print("====================================================")
-        print("******************* SCALE SIM **********************")
+        print("******************* DSE START **********************")
         print("====================================================")
         print("Array Size: \t" + str(self.ar_h_min) + "x" + str(self.ar_w_min))
         print("SRAM IFMAP: \t" + str(self.isram_min))
