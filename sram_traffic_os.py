@@ -255,7 +255,7 @@ def gen_read_trace(
 
                     else:
                         row_clk_offset[r] = neg_inf
-            print((r, row_ofmap_idx[r], v_fold_barrier[r], v_fold_row[r]))
+            # print((r, row_ofmap_idx[r], v_fold_barrier[r], v_fold_row[r]))
 
         # Get out of the barrier one by one
         # IMPORTANT: The barrier insertion and recovery is in separate loops to ensure that
@@ -339,7 +339,7 @@ def gen_read_trace(
 
         # Update tracking variables
         local_cycle += 1
-        print(local_cycle, filt_done, ifmap_done)
+        # print(local_cycle, filt_done, ifmap_done)
     pbar.close()
     outfile.close()
     #ofmap_out.close()
@@ -392,9 +392,10 @@ def gen_write_trace(
     outfile = open(sram_write_trace_file,"w")
 
     #This is the cycle when all the OFMAP elements in the first col become available
-    #第一个元素算完的时间为
+    #第一列元素计算完的时间为
     local_cycle = r2c + active_col - 1
 
+    # 还有剩余px或者filter没有被计算时
     while (remaining_px > 0) or (remaining_filt > 0):
 
         # 每行都是一个pixels
@@ -421,7 +422,9 @@ def gen_write_trace(
             # In case of vertical fold we have to track when the output of (0,0) is generated
             # Shifting back local cycles to capture the last OFMAP generation in (0,0) for this fold
             last_fold_cycle   = local_cycle + active_row
-            local_cycle -= (active_row + active_col - 1)
+            # local_cycle -= (active_row + active_col - 1)
+            # 这里写错了
+            local_cycle -= (active_col - 1)
             sticky_flag = True
 
             # There are more OFMAP channels to go
@@ -464,10 +467,10 @@ def gen_write_trace(
 
 if __name__ == "__main__":
    sram_traffic(
-       dimension_rows = 8,
+       dimension_rows = 4,
        dimension_cols = 4,
        ifmap_h = 7, ifmap_w = 7,
        filt_h = 2, filt_w = 2,
        num_channels = 1, strides = 1,
-       num_filt = 7
+       num_filt = 16
    )

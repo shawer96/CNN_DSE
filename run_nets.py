@@ -2,6 +2,7 @@ import trace_gen_wrapper as tg
 import os
 import subprocess
 
+WORD_SIZE_BYTES = 4
 
 def run_net( ifmap_sram_size=1,
              filter_sram_size=1,
@@ -94,7 +95,7 @@ def run_net( ifmap_sram_size=1,
                                 num_filt = num_filters,
                                 strides = strides,
                                 data_flow = data_flow,
-                                word_size_bytes = 1,
+                                word_size_bytes = WORD_SIZE_BYTES,
                                 filter_sram_size = filter_sram_size,
                                 ifmap_sram_size = ifmap_sram_size,
                                 ofmap_sram_size = ofmap_sram_size,

@@ -72,6 +72,9 @@ def gen_all_traces(
             )
 
     #print("Generating DRAM traffic")
+    # 利用Sram的时间反推DRAMD执行时间
+    # 这里还是一个一个调用的，也就是说这三者可以同时发生，但是实际上我们的带宽并没有这么多，
+    # 而且应该如何cover计算和访存之间的延时
     dram.dram_trace_read_v2(
         sram_sz=ifmap_sram_size,
         word_sz_bytes=word_size_bytes,
@@ -105,6 +108,7 @@ def gen_all_traces(
     return bw_numbers, detailed_log, util, sram_cycles
 
 
+# bw for bandwidth
 def gen_max_bw_numbers( dram_ifmap_trace_file, dram_filter_trace_file,
                     dram_ofmap_trace_file, sram_write_trace_file, sram_read_trace_file
                     ):
@@ -188,7 +192,7 @@ def gen_max_bw_numbers( dram_ifmap_trace_file, dram_filter_trace_file,
     #print(log)
     return log
 
-
+# 生成带宽信息
 def gen_bw_numbers( dram_ifmap_trace_file, dram_filter_trace_file,
                     dram_ofmap_trace_file, sram_write_trace_file, 
                     sram_read_trace_file

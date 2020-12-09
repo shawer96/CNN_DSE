@@ -8,7 +8,7 @@ from absl import app
 FLAGS = flags.FLAGS
 #name of flag | default | explanation
 flags.DEFINE_string("arch_config","./configs/scale.cfg","file where we are getting our architechture from")
-flags.DEFINE_string("network","./topologies/conv_nets/mobilenet.csv","topology that we are reading")
+flags.DEFINE_string("network","./topologies/conv_nets/mobilenet_Conv1.csv","topology that we are reading")
 
 
 class scale:
@@ -56,7 +56,7 @@ class scale:
 
         ## FILTER SRAM buffer min, max
         filter_sram = config.get(arch_sec, 'FilterSramSz').split(',')
-        self.fsram_min = filter_sram[0].strip()
+        self.fsram_min = filter_sram[0].strip() 
 
         if len(filter_sram) > 1:
             self.fsram_max = filter_sram[1].strip()
@@ -118,9 +118,9 @@ class scale:
         #print("Net name = " + net_name)
         offset_list = [self.ifmap_offset, self.filter_offset, self.ofmap_offset]
 
-        r.run_net(  ifmap_sram_size  = int(self.isram_min),
-                    filter_sram_size = int(self.fsram_min),
-                    ofmap_sram_size  = int(self.osram_min),
+        r.run_net(  ifmap_sram_size  = int(self.isram_min) * 1024,
+                    filter_sram_size = int(self.fsram_min) * 1024,
+                    ofmap_sram_size  = int(self.osram_min) * 1024,
                     array_h = int(self.ar_h_min),
                     array_w = int(self.ar_w_min),
                     net_name = net_name,
@@ -151,7 +151,6 @@ class scale:
             new_path= path + "_" + str(t)
             os.system("mv " + path + " " + new_path)
             os.system("mkdir " + path)
-
 
         cmd = "mv *.csv " + path
         os.system(cmd)

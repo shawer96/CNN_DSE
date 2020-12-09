@@ -15,8 +15,8 @@ def prune(input_list):
 
 
 def dram_trace_read_v2(
-        sram_sz         = 512 * 1024,
-        word_sz_bytes   = 1,
+        sram_sz         = 512 * 1024,       #这里的大小应该就是Byte
+        word_sz_bytes   = 1,                #一个字几个字节
         min_addr = 0, max_addr=1000000,
         default_read_bw = 10,               # this is arbitrary
         sram_trace_file = "sram_log.csv",
@@ -24,35 +24,47 @@ def dram_trace_read_v2(
     ):
 
     t_fill_start    = -1
-    t_drain_start   = 0
-    init_bw         = default_read_bw         # Taking an arbitrary initial bw of 4 bytes per cycle
+    t_drain_start = 0           # 开始计算的时间，从计算时间开始倒推填充的起始时间
+    init_bw = default_read_bw   # Taking an arbitrary initial bw of 4 bytes per cycle
+                                # SRAM的带宽，一个cycle能取多少个word的数，在我们的cgra中是8
+    
 
     sram = set()
 
+    # 根据sram中的数倒推load的时间
     sram_requests = open(sram_trace_file, 'r')
     dram          = open(dram_trace_file, 'w')
 
     #for entry in tqdm(sram_requests):
+    # 每次遍历一行（也就是一个cycle）的sram数据，放在一个对应的list中
     for entry in sram_requests:
         elems = entry.strip().split(',')
         elems = prune(elems)
         elems = [float(x) for x in elems]
 
-        clk = elems[0]
+        clk = elems[0]  #第一个元素是时钟信息
 
+        # 逐一添加元素
         for e in range(1, len(elems)):
 
+            # 通过此地址判断是否是有效，并且不再sram中则需要去Dram中取
             if (elems[e] not in sram) and (elems[e] >= min_addr) and (elems[e] < max_addr):
 
                 # Used up all the unique data in the SRAM?
-                if len(sram) + word_sz_bytes > sram_sz:
+                # 是否SRAM的数量已经占满
+                # len(sram)是sram中的元素数量
+                if (len(sram) + 1)*word_sz_bytes > sram_sz:
 
+                    # 开始计算填充满需要的时间
                     if t_fill_start == -1:
-                        t_fill_start = t_drain_start - math.ceil(len(sram) / (init_bw * word_sz_bytes))
+                        # t_fill_start = t_drain_start - math.ceil(len(sram) / (init_bw * word_sz_bytes))
+                        t_fill_start = t_drain_start - math.ceil(len(sram) / (init_bw))
 
                     # Generate the filling trace from time t_fill_start to t_drain_start
+                    # 需要填充的时间
                     cycles_needed   = t_drain_start - t_fill_start
-                    words_per_cycle = math.ceil(len(sram) / (cycles_needed * word_sz_bytes))
+                    # words_per_cycle = math.ceil(len(sram) / (cycles_needed * word_sz_bytes))
+                    words_per_cycle = math.ceil(len(sram) / cycles_needed)
 
                     c = t_fill_start
 
@@ -75,13 +87,16 @@ def dram_trace_read_v2(
                 sram.add(elems[e])
 
 
+    # 这一部分与上述代码的作用相同，只是为了解决sram中剩余的元素
     if len(sram) > 0:
         if t_fill_start == -1:
-            t_fill_start = t_drain_start - math.ceil(len(sram) / (init_bw * word_sz_bytes))
+            # t_fill_start = t_drain_start - math.ceil(len(sram) / (init_bw * word_sz_bytes))
+            t_fill_start = t_drain_start - math.ceil(len(sram) / init_bw )
 
         # Generate the filling trace from time t_fill_start to t_drain_start
         cycles_needed = t_drain_start - t_fill_start
-        words_per_cycle = math.ceil(len(sram) / (cycles_needed * word_sz_bytes))
+        # words_per_cycle = math.ceil(len(sram) / (cycles_needed * word_sz_bytes))
+        words_per_cycle = math.ceil(len(sram) / cycles_needed)
 
         c = t_fill_start
 

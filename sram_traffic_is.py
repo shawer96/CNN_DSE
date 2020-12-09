@@ -50,7 +50,7 @@ def sram_traffic(
         max_parallel_window = math.floor(dimension_rows/ px_per_conv_window)
 
     '''
-    沿着水平方向展开的是Nox*Noy
+    沿着水平方向展开的是Nix*Noy
     '''
     reqd_cols = e2          # Total number of cols need to be mapped
     max_cols_per_v_fold = max_parallel_window * dimension_cols

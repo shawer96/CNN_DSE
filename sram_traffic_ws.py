@@ -440,7 +440,6 @@ def gen_trace_ifmap_partial(
     for e in range(int(num_ofmap_px)):
         entry = str(cycle) + ", "
         cycle += 1    
-        print("ifmap cycle = %d"%cycle)
         #print("Cycle= " + str(cycle))
         #Inner loop for all the rows in array
         num_rows = min(num_rows, remaining)
