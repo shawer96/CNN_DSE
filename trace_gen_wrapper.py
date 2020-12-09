@@ -27,7 +27,10 @@ def gen_all_traces(
     ):
 
     sram_cycles = 0
-    util        = 0
+    util = 0
+    ifmap_dram_acc_times = 0
+    ofmap_dram_acc_times = 0
+    filt_dram_acc_times = 0
 
     print("Generating traces and bw numbers")
     if data_flow == 'os':
@@ -75,7 +78,7 @@ def gen_all_traces(
     # 利用Sram的时间反推DRAMD执行时间
     # 这里还是一个一个调用的，也就是说这三者可以同时发生，但是实际上我们的带宽并没有这么多，
     # 而且应该如何cover计算和访存之间的延时
-    dram.dram_trace_read_v2(
+    ifmap_dram_acc_times = dram.dram_trace_read_v2(
         sram_sz=ifmap_sram_size,
         word_sz_bytes=word_size_bytes,
         min_addr=ifmap_base, max_addr=filt_base,
@@ -83,7 +86,7 @@ def gen_all_traces(
         dram_trace_file=dram_ifmap_trace_file,
     )
 
-    dram.dram_trace_read_v2(
+    filt_dram_acc_times = dram.dram_trace_read_v2(
         sram_sz= filter_sram_size,
         word_sz_bytes= word_size_bytes,
         min_addr=filt_base, max_addr=ofmap_base,
@@ -91,7 +94,7 @@ def gen_all_traces(
         dram_trace_file= dram_filter_trace_file,
     )
 
-    dram.dram_trace_write(
+    ofmap_dram_acc_times = dram.dram_trace_write(
         ofmap_sram_size= ofmap_sram_size,
         data_width_bytes= word_size_bytes,
         sram_write_trace_file= sram_write_trace_file,
@@ -104,7 +107,9 @@ def gen_all_traces(
                                  dram_ofmap_trace_file, sram_write_trace_file,
                                  sram_read_trace_file)
                                  #array_h, array_w)
+    detailed_log += str(ifmap_dram_acc_times) +",\t" + str(filt_dram_acc_times) + ",\t" + str(ofmap_dram_acc_times) + ","
 
+    print((ifmap_dram_acc_times, filt_dram_acc_times, ofmap_dram_acc_times))
     return bw_numbers, detailed_log, util, sram_cycles
 
 

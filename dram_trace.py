@@ -18,11 +18,12 @@ def dram_trace_read_v2(
         sram_sz         = 512 * 1024,       #这里的大小应该就是Byte
         word_sz_bytes   = 1,                #一个字几个字节
         min_addr = 0, max_addr=1000000,
-        default_read_bw = 10,               # this is arbitrary
+        default_read_bw = 8,               # this is arbitrary
         sram_trace_file = "sram_log.csv",
         dram_trace_file = "dram_log.csv"
     ):
 
+    total_dram_acc_times = 0        # Dram访存次数
     t_fill_start    = -1
     t_drain_start = 0           # 开始计算的时间，从计算时间开始倒推填充的起始时间
     init_bw = default_read_bw   # Taking an arbitrary initial bw of 4 bytes per cycle
@@ -46,13 +47,14 @@ def dram_trace_read_v2(
 
         # 逐一添加元素
         for e in range(1, len(elems)):
-
+            
             # 通过此地址判断是否是有效，并且不再sram中则需要去Dram中取
             if (elems[e] not in sram) and (elems[e] >= min_addr) and (elems[e] < max_addr):
 
                 # Used up all the unique data in the SRAM?
-                # 是否SRAM的数量已经占满
-                # len(sram)是sram中的元素数量
+                # 根据阵列到SRAM的请求，取不大于sram容量，最多的数。因为计算是理想的每个周期都在算，
+                # 所以尽量按照sram的大小进行分块
+                #len(sram)是元素数量
                 if (len(sram) + 1)*word_sz_bytes > sram_sz:
 
                     # 开始计算填充满需要的时间
@@ -75,6 +77,7 @@ def dram_trace_read_v2(
                             if len(sram) > 0:
                                 p = sram.pop()
                                 trace += str(p) + ", "
+                                total_dram_acc_times += 1
 
                         trace += "\n"
                         dram.write(trace)
@@ -107,6 +110,7 @@ def dram_trace_read_v2(
                 if len(sram) > 0:
                     p = sram.pop()
                     trace += str(p) + ", "
+                    total_dram_acc_times += 1
 
             trace += "\n"
             dram.write(trace)
@@ -114,11 +118,11 @@ def dram_trace_read_v2(
 
     sram_requests.close()
     dram.close()
-
+    return total_dram_acc_times 
 
 def dram_trace_write(ofmap_sram_size = 64,
                      data_width_bytes = 1,
-                     default_write_bw = 10,                     # this is arbitrary
+                     default_write_bw = 8,                     # this is arbitrary
                      sram_write_trace_file = "sram_write.csv",
                      dram_write_trace_file = "dram_write.csv"):
 
@@ -127,6 +131,7 @@ def dram_trace_write(ofmap_sram_size = 64,
 
     last_clk = 0
     clk = 0
+    total_dram_acc_times = 0
 
     sram_buffer = [set(), set()]
     filling_buf     = 0
@@ -152,7 +157,8 @@ def dram_trace_write(ofmap_sram_size = 64,
             #print("Draining data. CLK = " + str(clk))
             if len(sram_buffer[draining_buf]) > 0:
                 delta_clks = clk - last_clk
-                data_per_clk = math.ceil(len(sram_buffer[draining_buf]) / delta_clks)
+                # data_per_clk = math.ceil(len(sram_buffer[draining_buf]) / delta_clks)
+                data_per_clk = default_write_bw
                 #print("Data per clk = " + str(data_per_clk))
 
                 # Drain the data
@@ -164,8 +170,10 @@ def dram_trace_write(ofmap_sram_size = 64,
                         if len(sram_buffer[draining_buf]) > 0:
                             addr = sram_buffer[draining_buf].pop()
                             trace += str(addr) + ", "
+                            total_dram_acc_times += 1
 
                     trace_file.write(trace + "\n")
+                last_clk = c
 
             #Swap the ids for drain buffer and fill buffer
             tmp             = draining_buf
@@ -173,7 +181,7 @@ def dram_trace_write(ofmap_sram_size = 64,
             filling_buf     = tmp
 
             #Set the last clk value
-            last_clk = clk
+            # last_clk = clk
 
             #Fill the new data now
             for i in range(1,len(elems)):
@@ -196,6 +204,8 @@ def dram_trace_write(ofmap_sram_size = 64,
                 if len(sram_buffer[draining_buf]) > 0:
                     addr = sram_buffer[draining_buf].pop()
                     trace += str(addr) + ", "
+                    total_dram_acc_times += 1
+
 
             trace_file.write(trace + "\n")
             reasonable_clk = max(c, clk)
@@ -212,6 +222,7 @@ def dram_trace_write(ofmap_sram_size = 64,
                 if len(sram_buffer[filling_buf]) > 0:
                     addr = sram_buffer[filling_buf].pop()
                     trace += str(addr) + ", "
+                    total_dram_acc_times += 1
 
             trace_file.write(trace + "\n")
 
@@ -219,6 +230,7 @@ def dram_trace_write(ofmap_sram_size = 64,
     #All traces done
     traffic.close()
     trace_file.close()
+    return total_dram_acc_times
 
 if __name__ == "__main__":
     dram_trace_read_v2(min_addr=0, max_addr=1000000, dram_trace_file="ifmaps_dram_read.csv")

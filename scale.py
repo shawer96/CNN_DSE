@@ -80,6 +80,9 @@ class scale:
         ofmap_offset = config.get(arch_sec, 'OfmapOffset')
         self.ofmap_offset = int(ofmap_offset.strip())
 
+        word_size_bytes = config.get(arch_sec, 'WordSizeByte')
+        self.word_size_bytes = int(word_size_bytes.strip())
+
         ## Read network_presets
         ## For now that is just the topology csv filename
         #topology_file = config.get(net_sec, 'TopologyCsvLoc')
@@ -118,15 +121,16 @@ class scale:
         #print("Net name = " + net_name)
         offset_list = [self.ifmap_offset, self.filter_offset, self.ofmap_offset]
 
-        r.run_net(  ifmap_sram_size  = int(self.isram_min) * 1024,
-                    filter_sram_size = int(self.fsram_min) * 1024,
-                    ofmap_sram_size  = int(self.osram_min) * 1024,
+        r.run_net(  ifmap_sram_size  = int(self.isram_min),
+                    filter_sram_size = int(self.fsram_min),
+                    ofmap_sram_size  = int(self.osram_min),
                     array_h = int(self.ar_h_min),
                     array_w = int(self.ar_w_min),
                     net_name = net_name,
                     data_flow = self.dataflow,
                     topology_file = self.topology_file,
-                    offset_list = offset_list
+                    offset_list=offset_list,
+                    word_size_bytes = self.word_size_bytes
                 )
         self.cleanup()
         print("************ SCALE SIM Run Complete ****************")
@@ -172,28 +176,49 @@ class scale:
     def run_sweep(self):
 
         all_data_flow_list = ['os', 'ws', 'is']
-        all_arr_dim_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-        all_sram_sz_list = [256, 512, 1024]
+        # all_arr_dim_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+        all_arr_dim_list = [8]
+        # all_sram_sz_list = [256, 512, 1024]
+
+        # all_ifmap_sram_sz_list = [1, 2, 4, 8, 16, 32, 64]
+        # all_ofmap_sram_sz_list = [1, 2, 4, 8, 16, 32, 64]
+        # all_filt_sram_sz_list = [1, 2, 4, 8, 16, 32, 64]
 
         data_flow_list = all_data_flow_list[1:]
-        arr_h_list = all_arr_dim_list[3:8]
-        arr_w_list = all_arr_dim_list[3:8]
+        arr_h_list = all_arr_dim_list[0]
+        arr_w_list = all_arr_dim_list[0]
         #arr_w_list = list(reversed(arr_h_list))
 
         net_name = self.topology_file.split('/')[-1].split('.')[0]
         for df in data_flow_list:
             self.dataflow = df
+            # for i in range(len(arr_h_list)):
+            self.ar_h_min = arr_h_list
+            self.ar_w_min = arr_w_list
 
-            for i in range(len(arr_h_list)):
-                self.ar_h_min = arr_h_list[i]
-                self.ar_w_min = arr_w_list[i]
+            # self.run_name = net_name + "_" + df + "_" + str(self.ar_h_min) + "x" + str(self.ar_w_min)
+            # print(str(self.isram_min, self.fsram_min, self.isram_min)+"\n")
+            # print(str(self.isram_max, self.fsram_max, self.isram_max)+"\n")
+            isram_sz = int(self.isram_min)
+            while (isram_sz <= int(self.isram_max)):
+                fsram_sz = int(self.fsram_min)
+                while (fsram_sz <= int(self.fsram_max)):
+                    osram_sz = int(self.osram_min)
+                    while (osram_sz <= int(self.osram_max)):
+                        self.run_name = net_name + "_" + df + "_" + str(self.isram_min) + "x" + str(self.fsram_min) + "x " + str(self.osram_min)
+                        # self.run_once
+                        osram_sz *= 2
+                        self.osram_min = str(osram_sz)
+                    fsram_sz *= 2
+                    self.fsram_min = str(fsram_sz)
+                isram_sz *= 2
+                print(isram_sz)
+                self.isram_min = str(isram_sz)
+                            
 
-                self.run_name = net_name + "_" + df + "_" + str(self.ar_h_min) + "x" + str(self.ar_w_min)
-
-                self.run_once()
 
 def main(argv):
-    s = scale(save = False, sweep = False)
+    s = scale(save = False, sweep = True)
     s.run_scale()
 
 if __name__ == '__main__':

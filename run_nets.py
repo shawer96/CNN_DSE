@@ -2,7 +2,7 @@ import trace_gen_wrapper as tg
 import os
 import subprocess
 
-WORD_SIZE_BYTES = 4
+# WORD_SIZE_BYTES = 4
 
 def run_net( ifmap_sram_size=1,
              filter_sram_size=1,
@@ -12,7 +12,8 @@ def run_net( ifmap_sram_size=1,
              data_flow = 'os',
              topology_file = './topologies/yolo_v2.csv',
              net_name='yolo_v2',
-             offset_list = [0, 10000000, 20000000]
+             offset_list=[0, 10000000, 20000000],
+             word_size_bytes = 1
             ):
 
     ifmap_sram_size *= 1024
@@ -42,7 +43,8 @@ def run_net( ifmap_sram_size=1,
                  "\tDRAM_Filter_start,\tDRAM_Filter_stop,\tDRAM_Filter_bytes," + \
                  "\tDRAM_OFMAP_start,\tDRAM_OFMAP_stop,\tDRAM_OFMAP_bytes," + \
                  "\tSRAM_read_start,\tSRAM_read_stop,\tSRAM_read_bytes," +\
-                 "\tSRAM_write_start,\tSRAM_write_stop,\tSRAM_write_bytes,\n"
+                 "\tSRAM_write_start,\tSRAM_write_stop,\tSRAM_write_bytes," + \
+                 "\tDRAM_IFAMP_acc_times,\tDRAM_FILT_acc_times,\tDRAM_OFAMP_acc_times,\n"
 
     detail.write(detailed_log)
 
@@ -95,7 +97,7 @@ def run_net( ifmap_sram_size=1,
                                 num_filt = num_filters,
                                 strides = strides,
                                 data_flow = data_flow,
-                                word_size_bytes = WORD_SIZE_BYTES,
+                                word_size_bytes = word_size_bytes,
                                 filter_sram_size = filter_sram_size,
                                 ifmap_sram_size = ifmap_sram_size,
                                 ofmap_sram_size = ofmap_sram_size,
