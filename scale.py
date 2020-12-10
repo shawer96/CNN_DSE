@@ -184,19 +184,27 @@ class scale:
         # all_ofmap_sram_sz_list = [1, 2, 4, 8, 16, 32, 64]
         # all_filt_sram_sz_list = [1, 2, 4, 8, 16, 32, 64]
 
-        data_flow_list = all_data_flow_list[1:]
+        data_flow_list = all_data_flow_list
         arr_h_list = all_arr_dim_list[0]
         arr_w_list = all_arr_dim_list[0]
         #arr_w_list = list(reversed(arr_h_list))
 
         net_name = self.topology_file.split('/')[-1].split('.')[0]
+
+        isram_begin , fsram_begin,osram_begin = int(self.isram_min), int(self.fsram_min), int(self.osram_min)
         for df in data_flow_list:
             self.dataflow = df
             # for i in range(len(arr_h_list)):
             self.ar_h_min = arr_h_list
             self.ar_w_min = arr_w_list
 
+<<<<<<< HEAD
             isram_begin , fsram_begin,osram_begin = int(self.isram_min), int(self.fsram_min), int(self.osram_min)
+=======
+            # self.run_name = net_name + "_" + df + "_" + str(self.ar_h_min) + "x" + str(self.ar_w_min)
+            # print(str(self.isram_min, self.fsram_min, self.isram_min)+"\n")
+            # print(str(self.isram_max, self.fsram_max, self.isram_max)+"\n")
+>>>>>>> 1492f324a5ac30fc39e13031131c7f6f2fd7b887
             # isram_end   , fsram_end  ,osram_end   =   
             isram_sz = isram_begin
             while (isram_sz <= int(self.isram_max)):
@@ -205,6 +213,10 @@ class scale:
                     osram_sz = osram_begin
                     while (osram_sz <= int(self.osram_max)):
                         self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
+<<<<<<< HEAD
+=======
+                        print(self.run_name)
+>>>>>>> 1492f324a5ac30fc39e13031131c7f6f2fd7b887
                         self.run_once()
                         osram_sz *= 2
                         self.osram_min = str(osram_sz)
