@@ -1,2 +1,2 @@
-rm -rf *.csv
+sudo rm -rf *.csv
 
