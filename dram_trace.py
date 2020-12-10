@@ -70,6 +70,7 @@ def dram_trace_read_v2(
 
                     c = t_fill_start
 
+                    total_dram_acc_times += len(sram)
                     while len(sram) > 0:
                         trace = str(c) + ", "
 
@@ -77,7 +78,7 @@ def dram_trace_read_v2(
                             if len(sram) > 0:
                                 p = sram.pop()
                                 trace += str(p) + ", "
-                                total_dram_acc_times += 1
+                                # total_dram_acc_times += 1
 
                         trace += "\n"
                         dram.write(trace)
@@ -92,6 +93,7 @@ def dram_trace_read_v2(
 
     # 这一部分与上述代码的作用相同，只是为了解决sram中剩余的元素
     if len(sram) > 0:
+        total_dram_acc_times += len(sram)
         if t_fill_start == -1:
             # t_fill_start = t_drain_start - math.ceil(len(sram) / (init_bw * word_sz_bytes))
             t_fill_start = t_drain_start - math.ceil(len(sram) / init_bw )
@@ -110,7 +112,7 @@ def dram_trace_read_v2(
                 if len(sram) > 0:
                     p = sram.pop()
                     trace += str(p) + ", "
-                    total_dram_acc_times += 1
+                    # total_dram_acc_times += 1
 
             trace += "\n"
             dram.write(trace)
@@ -156,6 +158,7 @@ def dram_trace_write(ofmap_sram_size = 64,
             # drain it
             #print("Draining data. CLK = " + str(clk))
             if len(sram_buffer[draining_buf]) > 0:
+                total_dram_acc_times += len(sram_buffer[draining_buf])
                 delta_clks = clk - last_clk
                 # data_per_clk = math.ceil(len(sram_buffer[draining_buf]) / delta_clks)
                 data_per_clk = default_write_bw
@@ -170,7 +173,6 @@ def dram_trace_write(ofmap_sram_size = 64,
                         if len(sram_buffer[draining_buf]) > 0:
                             addr = sram_buffer[draining_buf].pop()
                             trace += str(addr) + ", "
-                            total_dram_acc_times += 1
 
                     trace_file.write(trace + "\n")
                 last_clk = c
@@ -190,6 +192,7 @@ def dram_trace_write(ofmap_sram_size = 64,
     #Drain the last fill buffer
     reasonable_clk = clk
     if len(sram_buffer[draining_buf]) > 0:
+        total_dram_acc_times += len(sram_buffer[filling_buf])
         #delta_clks = clk - last_clk
         #data_per_clk = math.ceil(len(sram_buffer[draining_buf]) / delta_clks)
         data_per_clk = default_write_bw
@@ -204,7 +207,7 @@ def dram_trace_write(ofmap_sram_size = 64,
                 if len(sram_buffer[draining_buf]) > 0:
                     addr = sram_buffer[draining_buf].pop()
                     trace += str(addr) + ", "
-                    total_dram_acc_times += 1
+                    # total_dram_acc_times += 1
 
 
             trace_file.write(trace + "\n")
@@ -212,6 +215,7 @@ def dram_trace_write(ofmap_sram_size = 64,
 
     if len(sram_buffer[filling_buf]) > 0:
         data_per_clk = default_write_bw
+        total_dram_acc_times += len(sram_buffer[filling_buf])
 
         # Drain the data
         c = reasonable_clk + 1
@@ -222,7 +226,6 @@ def dram_trace_write(ofmap_sram_size = 64,
                 if len(sram_buffer[filling_buf]) > 0:
                     addr = sram_buffer[filling_buf].pop()
                     trace += str(addr) + ", "
-                    total_dram_acc_times += 1
 
             trace_file.write(trace + "\n")
 
