@@ -1,6 +1,6 @@
 *.log
 original_repo
 ./.vscode
-
+*.csv
 
 __pycache__
