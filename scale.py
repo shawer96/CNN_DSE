@@ -7,8 +7,9 @@ from absl import app
 
 FLAGS = flags.FLAGS
 #name of flag | default | explanation
-flags.DEFINE_string("arch_config","./configs/scale.cfg","file where we are getting our architechture from")
-flags.DEFINE_string("network","./topologies/conv_nets/mobilenet_Conv1.csv","topology that we are reading")
+flags.DEFINE_string("arch_config","./configs/YoloTiny_Fixed_Sram.cfg","file where we are getting our architechture from")
+
+flags.DEFINE_string("network","./topologies/conv_nets/yolo_v3_tiny.csv","topology that we are reading")
 
 
 class scale:
@@ -34,6 +35,7 @@ class scale:
         ## Array height min, max
         ar_h = config.get(arch_sec, 'ArrayHeight').split(',')
         self.ar_h_min = ar_h[0].strip()
+        print(self.ar_h_min)
 
         if len(ar_h) > 1:
             self.ar_h_max = ar_h[1].strip()
@@ -66,8 +68,13 @@ class scale:
         ofmap_sram = config.get(arch_sec, 'OfmapSramSz').split(',')
         self.osram_min = ofmap_sram[0].strip()
 
+
         if len(ofmap_sram) > 1:
             self.osram_max = ofmap_sram[1].strip()
+
+        ## Total_sram_size
+        ofmap_sram = config.get(arch_sec, 'TotalSramSz').split(',')
+        self.Total_sram_size = ofmap_sram[0].strip()
 
         self.dataflow= config.get(arch_sec, 'Dataflow')
 
@@ -175,9 +182,9 @@ class scale:
 
     def run_sweep(self):
 
-        all_data_flow_list = ['os', 'ws', 'is']
+        # all_data_flow_list = ['ws','is']
+        all_data_flow_list = ['os']
         # all_arr_dim_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-        all_arr_dim_list = [8]
         # all_sram_sz_list = [256, 512, 1024]
 
         # all_ifmap_sram_sz_list = [1, 2, 4, 8, 16, 32, 64]
@@ -185,47 +192,122 @@ class scale:
         # all_filt_sram_sz_list = [1, 2, 4, 8, 16, 32, 64]
 
         data_flow_list = all_data_flow_list
-        arr_h_list = all_arr_dim_list[0]
-        arr_w_list = all_arr_dim_list[0]
+
         #arr_w_list = list(reversed(arr_h_list))
 
         net_name = self.topology_file.split('/')[-1].split('.')[0]
+        total_sram_sz = int(self.Total_sram_size)
 
-        isram_begin , fsram_begin,osram_begin = int(self.isram_min), int(self.fsram_min), int(self.osram_min)
+        isram_begin , fsram_begin, osram_begin = int(self.isram_min), int(self.fsram_min), int(self.osram_min)
         for df in data_flow_list:
             self.dataflow = df
             # for i in range(len(arr_h_list)):
-            self.ar_h_min = arr_h_list
-            self.ar_w_min = arr_w_list
+            # self.ar_h_min = arr_h_list
+            # self.ar_w_min = arr_w_list
 
-<<<<<<< HEAD
-            isram_begin , fsram_begin,osram_begin = int(self.isram_min), int(self.fsram_min), int(self.osram_min)
-=======
             # self.run_name = net_name + "_" + df + "_" + str(self.ar_h_min) + "x" + str(self.ar_w_min)
             # print(str(self.isram_min, self.fsram_min, self.isram_min)+"\n")
             # print(str(self.isram_max, self.fsram_max, self.isram_max)+"\n")
->>>>>>> 1492f324a5ac30fc39e13031131c7f6f2fd7b887
             # isram_end   , fsram_end  ,osram_end   =   
-            isram_sz = isram_begin
-            while (isram_sz <= int(self.isram_max)):
+            if(df == 'is'):
+                isram_sz = isram_begin
+                osram_sz = osram_begin
+                while (isram_sz < int(self.isram_max)):
+                    fsram_sz = total_sram_sz - isram_sz
+                    self.fsram_min = str(fsram_sz)
+                    self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
+                    print(self.run_name)
+                    self.run_once()
+                    self.osram_min = str(osram_sz)
+                    isram_sz *= 2
+                    self.isram_min = str(isram_sz)
+
                 fsram_sz = fsram_begin
-                while (fsram_sz <= int(self.fsram_max)):
-                    osram_sz = osram_begin
-                    while (osram_sz <= int(self.osram_max)):
-                        self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
-<<<<<<< HEAD
-=======
-                        print(self.run_name)
->>>>>>> 1492f324a5ac30fc39e13031131c7f6f2fd7b887
-                        self.run_once()
-                        osram_sz *= 2
-                        self.osram_min = str(osram_sz)
-                        # print(osram_sz)
+                osram_sz = osram_begin
+                while (fsram_sz < int(self.isram_max)):
+                    isram_sz = total_sram_sz - fsram_sz
+                    self.isram_min = str(isram_sz)
+                    if (isram_sz == fsram_sz): 
+                        break
+                    self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
+                    print(self.run_name)
+                    self.run_once()
+                    self.osram_min = str(osram_sz)
+                    # print(osram_sz)
                     fsram_sz *= 2
                     self.fsram_min = str(fsram_sz)
-                isram_sz *= 2
-                self.isram_min = str(isram_sz)
-                            
+                 
+            elif(df == 'ws'):
+
+                isram_sz = isram_begin
+                osram_sz = osram_begin
+                while (isram_sz < int(self.isram_max)):
+                    fsram_sz = total_sram_sz - isram_sz
+                    self.fsram_min = str(fsram_sz)
+                    self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
+                    print(self.run_name)
+                    self.run_once()
+                    self.osram_min = str(osram_sz)
+                    isram_sz *= 2
+                    self.isram_min = str(isram_sz)
+
+                fsram_sz = fsram_begin
+                osram_sz = osram_begin
+                while (fsram_sz < int(self.isram_max)):
+                    isram_sz = total_sram_sz - fsram_sz
+                    self.isram_min = str(isram_sz)
+                    if (isram_sz == fsram_sz): 
+                        break
+                    self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
+                    print(self.run_name)
+                    self.run_once()
+                    self.osram_min = str(osram_sz)
+                    # print(osram_sz)
+                    fsram_sz *= 2
+                    self.fsram_min = str(fsram_sz) 
+                
+
+            elif(df == 'os'):
+                osram_sz = osram_begin
+                while (osram_sz <= int(self.osram_max)):
+                    fsram_sz = fsram_begin
+                    while (fsram_sz <= int(self.fsram_max)):
+                        isram_sz = isram_begin
+                        while (isram_sz <= int(self.isram_max)):
+                            if(2*osram_sz+2*isram_sz+2*fsram_sz < total_sram_sz):
+                                break
+                            self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
+                            print(self.run_name)
+                            self.run_once()
+                            # print(osram_sz)
+                            isram_sz *= 2
+                            self.isram_min = str(isram_sz)
+                        self.fsram_min = str(fsram_sz)
+                        fsram_sz *= 2
+                osram_sz *= 2
+                self.osram_min = str(osram_sz)
+
+
+                # while (isram_sz <= int(self.isram_max)):
+                #     while (fsram_sz <= int(self.fsram_max)):
+                #         osram_sz = osram_begin
+                #         while (osram_sz <= int(self.osram_max)):
+                #             if(df == 'is' and (2*isram_sz + fsram_sz >= total_sram_sz)):
+                #                 break
+                #             if(df == 'ws' and (isram_sz + 2*fsram_sz >= total_sram_sz)):
+                #                 break
+                #             if(df == 'os' and (isram_sz + fsram_sz + 2*osram_sz >= total_sram_sz)):
+                #                 break 
+                #             self.run_name = net_name + "_" + df + "_" + str(isram_sz) + "x" + str(fsram_sz) + "x" + str(osram_sz)
+                #             print(self.run_name)
+                #             self.run_once()
+                #             osram_sz *= 2
+                #             self.osram_min = str(osram_sz)
+                #             # print(osram_sz)
+                #         fsram_sz *= 2
+                #         self.fsram_min = str(fsram_sz)
+                #     isram_sz *= 2
+                #     self.isram_min = str(isram_sz)
 
 
 def main(argv):
